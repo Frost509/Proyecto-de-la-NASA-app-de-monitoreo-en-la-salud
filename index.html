@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barrilete Cósmico · Astronaut Health Monitor v3 (Wokwi IoT Edition)</title>
+<meta name="description" content="Herramienta offline/IoT de autoevaluación de salud para astronautas conectada a Wokwi ESP32. NASA Space Apps Challenge 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800&family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  :root{--bg:#03050f;--txt:#e6e9f5;--mute:#9aa3c7;--cyan:#00d9ff;--pink:#ff4fd8;--amber:#ffb347;--green:#00ff88;--yellow:#ffd166;--red:#ff5d73;--line:rgba(255,255,255,.12)}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;color:var(--txt);font-family:'IBM Plex Sans',system-ui,sans-serif;line-height:1.55;background-color:var(--bg);
+    background-image:radial-gradient(1.5px 1.5px at 20px 30px,#fff,transparent),radial-gradient(1px 1px at 90px 80px,#9ad8ff,transparent),radial-gradient(1.5px 1.5px at 150px 20px,#fff,transparent),radial-gradient(1px 1px at 60px 150px,#fff,transparent),radial-gradient(1px 1px at 170px 120px,#ffd9a0,transparent),radial-gradient(ellipse at 20% 0%,#1b2559,transparent 60%);
+    background-size:200px 200px,200px 200px,200px 200px,200px 200px,200px 200px,100% 100%;background-attachment:fixed}
+  a{color:var(--cyan)}
+  h1,h2,h3{font-family:'Orbitron',sans-serif;margin:0}
+  .wrap{max-width:1180px;margin:0 auto;padding-left:16px;padding-right:16px}
+  button{font-family:inherit}
+
+  header{border-bottom:1px solid rgba(0,217,255,.35);background:rgba(5,8,22,.85);backdrop-filter:blur(8px);position:sticky;top:0;z-index:20}
+  .hd{display:flex;align-items:center;gap:14px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+  .brand{flex:1;min-width:200px}
+  .brand b{display:block;font-family:'Orbitron',sans-serif;letter-spacing:3px;font-size:1rem;color:var(--cyan)}
+  .brand span{font-size:.76rem;color:var(--mute)}
+  .hero{padding:22px 0 4px}
+  .hero h1{font-size:clamp(1.3rem,4vw,2.1rem);letter-spacing:2px;margin-bottom:8px}
+  .hero p{margin:0;color:var(--mute);max-width:85ch}
+
+  .envbar{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;padding:10px 14px;border-radius:12px;background:rgba(0,217,255,.06);border:1px solid rgba(0,217,255,.25);font:.76rem 'JetBrains Mono',monospace}
+  .envbadge{padding:4px 10px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+  .envbadge b{color:var(--cyan)}
+
+  .grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin:18px 0}
+  @media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}.row{flex-wrap:wrap}.row .k{width:100%}input[type=number]{width:70px}}
+  .card{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:16px;padding:18px 20px;backdrop-filter:blur(6px);margin-bottom:18px}
+  .grid2 .card{margin-bottom:0}
+  .card h2{font-size:.95rem;letter-spacing:2px;color:var(--cyan);margin-bottom:10px}
+  .card p{margin:.4em 0}
+  .note{font-size:.8rem;color:var(--mute)}
+  .mono{font-family:'JetBrains Mono',monospace}
+
+  .status{--c:var(--cyan);border:1.5px solid var(--c);border-radius:20px;padding:18px;text-align:center;background:linear-gradient(160deg,rgba(20,28,70,.92),rgba(6,9,30,.95));box-shadow:0 0 22px var(--c),inset 0 0 30px rgba(0,217,255,.08);transition:.4s}
+  .status.l0{--c:var(--green)}.status.l1{--c:var(--yellow)}.status.l2{--c:var(--red)}
+  .status .tag{font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:3px;color:var(--mute)}
+  .status .big{font-family:'Orbitron',sans-serif;font-size:clamp(1.8rem,6vw,2.6rem);font-weight:800;letter-spacing:5px;color:var(--c);text-shadow:0 0 16px var(--c);margin:4px 0}
+  .status .act{font-size:.95rem}
+  .status .why{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--mute);margin-top:8px;text-align:left}
+  .status .why li{margin:2px 0}
+  .btn{background:var(--cyan);color:#001;border:0;border-radius:10px;padding:8px 14px;font:600 .8rem 'JetBrains Mono',monospace;cursor:pointer;margin-top:10px}
+  .btn.ghost{background:none;color:var(--cyan);border:1px solid var(--cyan)}
+  .btn.safe{background:var(--green);color:#001}
+  textarea.rep{width:100%;height:130px;margin-top:10px;background:#050816;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px;font:.75rem 'JetBrains Mono',monospace}
+
+  .bodywrap{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap}
+  svg.body{width:230px;height:auto;max-width:100%}
+  .out{fill:rgba(0,217,255,.06);stroke:#4fc3e8;stroke-width:2;stroke-linejoin:round}
+  .limb{fill:none;stroke:#4fc3e8;stroke-width:15;stroke-linecap:round;opacity:.35}
+  .hot{cursor:pointer}
+  .hot .ring{fill:none;stroke-width:2;opacity:.6;transform-box:fill-box;transform-origin:center;animation:pulse 2s infinite}
+  .hot .core{stroke:#050816;stroke-width:2}
+  .hot.lv0 .core{fill:var(--green)}.hot.lv0 .ring{stroke:var(--green)}
+  .hot.lv1 .core{fill:var(--yellow)}.hot.lv1 .ring{stroke:var(--yellow)}
+  .hot.lv2 .core{fill:var(--red)}.hot.lv2 .ring{stroke:var(--red)}
+  .hot.sel .core{stroke:#fff;stroke-width:3}
+  .pills{display:flex;flex-direction:column;gap:8px}
+  .pillbtn{background:rgba(255,255,255,.05);color:var(--txt);border:1.5px solid var(--line);border-radius:14px;padding:8px 12px;font:600 .76rem 'JetBrains Mono',monospace;cursor:pointer;text-align:left}
+  .pillbtn::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;background:var(--green)}
+  .pillbtn.lv1::before{background:var(--yellow)}.pillbtn.lv2::before{background:var(--red)}
+  .pillbtn.sel{border-color:#fff}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+  .tile{--c:var(--green);background:rgba(255,255,255,.04);border:1px solid var(--line);border-left:5px solid var(--c);border-radius:12px;padding:10px 12px;cursor:pointer;text-align:left;color:inherit;font:inherit}
+  .tile.l1{--c:var(--yellow)}.tile.l2{--c:var(--red)}
+  .tile .n{font-size:.68rem;letter-spacing:1.5px;color:var(--mute);text-transform:uppercase}
+  .tile .v{font-family:'Orbitron',sans-serif;font-size:1.35rem;font-weight:800;color:var(--c)}
+  .tile .v small{font:.68rem 'JetBrains Mono',monospace;color:var(--mute);margin-left:4px}
+  .tile .b{font:.68rem 'JetBrains Mono',monospace;color:var(--mute)}
+
+  .ctl{border:1px dashed rgba(127,233,255,.35);border-radius:14px;padding:10px 12px;margin-bottom:12px;background:rgba(0,217,255,.04)}
+  .ctl .ttl{font:600 .7rem 'JetBrains Mono',monospace;letter-spacing:2px;color:#7fe9ff;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .row{display:flex;align-items:center;margin:8px 0;font:.75rem 'JetBrains Mono',monospace;color:#cfd6f5}
+  .row .k{width:125px;flex:none}
+  .row .vv{width:78px;text-align:right;flex:none;font-weight:600;color:var(--green)}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;min-width:0;height:8px;border-radius:8px;outline:none;margin:0 10px;background:linear-gradient(90deg,#0077ff,#00d9ff)}
+  input[type=number],select{background:#050816;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:5px 8px;font:600 .8rem 'JetBrains Mono',monospace;width:78px}
+  select{width:auto}
+  .presets{display:flex;flex-wrap:wrap;gap:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .chip{font:600 .72rem 'JetBrains Mono',monospace;border:1px solid var(--line);border-radius:20px;padding:2px 10px;border-left:5px solid var(--green)}
+  .chip.l1{border-left-color:var(--yellow)}.chip.l2{border-left-color:var(--red)}
+  .info dt{font:600 .7rem 'JetBrains Mono',monospace;letter-spacing:2px;color:var(--cyan);margin-top:10px}
+  .info dd{margin:2px 0 0}
+  .haz{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+  .hz{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.03)}
+  .hz b{font:600 .78rem 'Orbitron',sans-serif;letter-spacing:1px}
+  .hz p{font-size:.8rem;color:var(--mute);margin:.3em 0}
+  .bar{height:12px;border-radius:8px;background:rgba(255,255,255,.1);overflow:hidden;margin:6px 0}
+  .bar i{display:block;height:100%;border-radius:8px;background:linear-gradient(90deg,#0077ff,#00ff88);transition:width .5s}
+  .task{display:flex;gap:10px;align-items:center;margin:6px 0;font-size:.9rem}
+  .task input{width:18px;height:18px;accent-color:#00d9ff}
+  table{width:100%;border-collapse:collapse;font-size:.82rem;margin:8px 0}
+  th,td{border:1px solid var(--line);padding:5px 8px;text-align:left}
+  th{color:var(--cyan)}
+  canvas{width:100%;height:170px;display:block;border-radius:10px;background:rgba(0,0,0,.25)}
+  footer{border-top:1px solid var(--line);margin-top:20px;padding:18px 0 40px;color:var(--mute);font-size:.8rem;text-align:center}
+  @keyframes pulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.9);opacity:0}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap hd">
+    <div class="brand">
+      <b>BARRILETE CÓSMICO · ASTRO-01</b>
+      <span>Escuela Industrial N°9 “15 de Noviembre” · El Calafate, Santa Cruz, Argentina · Edge / Offline-First &amp; Wokwi IoT</span>
+    </div>
+    <span id="mqttBadge" class="envbadge">Wokwi MQTT: <b>OFFLINE (Modo Autónomo)</b></span>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>MONITOR DE SALUD DEL ASTRONAUTA + TELEMETRÍA WOKWI</h1>
+    <p>Evalúa signos vitales, masa corporal en microgravedad (SLAMMD), campo gravitatorio, estado de sueño (actigrafía) y ambiente de cabina contra la <b>línea base personal</b> del astronauta.</p>
+    <div class="envbar">
+      <div class="envbadge">Bus Local Sensores: <b>0 ms (ACTIVO)</b></div>
+      <div class="envbadge">Gravedad Actual: <b id="bGrav">0.00 G (MICROGRAVEDAD)</b></div>
+      <div class="envbadge">Estado Circadiano: <b id="bSleepState">DESPIERTO (ACTIVIDAD)</b></div>
+      <div class="envbadge">Desplazamiento Fluidos (0G): <b id="bFluid">68%</b></div>
+      <div class="envbadge">Medida de Seguridad: <b id="bSafe">EN ESPERA</b></div>
+    </div>
+  </section>
+
+  <!-- 1. ESTADO + CUERPO -->
+  <div class="grid2">
+    <section class="card">
+      <h2>ESTADO DE LA MISIÓN · SEMÁFORO DE SEGURIDAD</h2>
+      <div class="status" id="status" role="status" aria-live="polite">
+        <div class="tag">NIVEL DE ALERTA BIOMÉDICA</div>
+        <div class="big" id="sBig">--</div>
+        <div class="act" id="sAct"></div>
+        <ul class="why" id="sWhy"></ul>
+      </div>
+      <div class="presets">
+        <button class="btn safe" id="safeBtn" type="button">✓ Ejecutar Medida de Seguridad / Contramedida</button>
+        <button class="btn" id="repBtn" type="button">Preparar informe para cirujano de vuelo</button>
+      </div>
+      <div id="repBox" hidden>
+        <textarea class="rep" id="repTxt" readonly></textarea>
+        <button class="btn ghost" id="copyBtn" type="button">Copiar Informe</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>MAPA CORPORAL · TOCÁ UNA ZONA</h2>
+      <div class="bodywrap">
+        <svg class="body" viewBox="0 0 300 370">
+          <path class="limb" d="M112 104 L72 172 L64 218"/><path class="limb" d="M188 104 L228 172 L236 218"/>
+          <path class="limb" d="M124 200 L116 292 L112 346"/><path class="limb" d="M176 200 L184 292 L188 346"/>
+          <circle class="out" cx="150" cy="52" r="26"/>
+          <path class="out" d="M108 98 Q150 84 192 98 L202 196 Q150 212 98 196 Z"/>
+          <g class="hot" data-r="brain" tabindex="0"><circle class="ring" cx="150" cy="50" r="12"/><circle class="core" cx="150" cy="50" r="12"/></g>
+          <g class="hot" data-r="lungs" tabindex="0"><circle class="ring" cx="124" cy="126" r="12"/><circle class="core" cx="124" cy="126" r="12"/></g>
+          <g class="hot" data-r="heart" tabindex="0"><circle class="ring" cx="170" cy="138" r="12"/><circle class="core" cx="170" cy="138" r="12"/></g>
+          <g class="hot" data-r="nutrition" tabindex="0"><circle class="ring" cx="150" cy="178" r="12"/><circle class="core" cx="150" cy="178" r="12"/></g>
+          <g class="hot" data-r="bones" tabindex="0"><circle class="ring" cx="122" cy="262" r="12"/><circle class="core" cx="122" cy="262" r="12"/></g>
+        </svg>
+        <div class="pills">
+          <button class="pillbtn" type="button" data-r="immune">Sistema inmune</button>
+          <button class="pillbtn" type="button" data-r="radiation">Radiación espacial</button>
+          <button class="pillbtn" type="button" data-r="gravity">Gravedad 0 y Masa</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 2. TILES DE TODAS LAS VARIABLES -->
+  <section class="card">
+    <h2>INDICADORES DE SALUD Y AMBIENTE ESPACIAL (12 VARIABLES)</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <!-- 3. PROTOCOLO Y EXPLICACIÓN DE LA ZONA -->
+  <section class="card info" id="infoCard">
+    <h2>PROTOCOLO DE SEGURIDAD Y ORIENTACIÓN MÉDICA (NASA HRP)</h2>
+    <div id="info"></div>
+  </section>
+
+  <!-- 4. LOS 5 PELIGROS DE NASA HRP -->
+  <section class="card">
+    <h2>LOS 5 PELIGROS DEL VUELO ESPACIAL HUMANO (NASA HRP)</h2>
+    <div class="haz" id="haz"></div>
+  </section>
+
+  <!-- 5. CONEXIÓN WOKWI + CONTROLES -->
+  <div class="grid2">
+    <section class="card">
+      <h2>CONEXIÓN CON WOKWI (POTENCIÓMETROS) Y CONTROLES</h2>
+
+      <div class="ctl">
+        <div class="ttl">
+          <span>PUENTE EN VIVO WOKWI ESP32 (MQTT / JSON)</span>
+          <button class="btn" id="btnMqtt" type="button" style="margin:0;padding:4px 10px">Conectar Broker Wokwi</button>
+        </div>
+        <p class="note">Tópico MQTT: <code class="mono">barrilete/astro01/telemetry</code> (vía <code class="mono">wss://broker.emqx.io:8084/mqtt</code>). También puedes pegar abajo un JSON del Monitor Serie de Wokwi:</p>
+        <textarea class="rep" id="wokwiJsonInput" placeholder='Pega aquí el JSON de Wokwi y presiona "Aplicar JSON de Wokwi"...' style="height:68px"></textarea>
+        <button class="btn ghost" id="btnParseJson" type="button">Aplicar JSON de Wokwi</button>
+      </div>
+
+      <div class="ctl">
+        <div class="ttl"><span>SIMULADOR MANUAL DE POTENCIÓMETROS Y VARIABLES</span></div>
+        <div class="row"><label class="k" for="mPulse">Pulso</label><input type="range" id="mPulse" min="40" max="140" value="72"><span class="vv" id="vmPulse">72 bpm</span></div>
+        <div class="row"><span class="k">Presión (Sys/Dia)</span><input type="number" id="sys" value="120"> / <input type="number" id="dia" value="80"> <span class="vv">mmHg</span></div>
+        <div class="row"><label class="k" for="mSpo2">Oxígeno SpO2</label><input type="range" id="mSpo2" min="85" max="100" step="0.1" value="98"><span class="vv" id="vmSpo2">98.0 %</span></div>
+        <div class="row"><label class="k" for="mTemp">Temperatura</label><input type="range" id="mTemp" min="35" max="39" step="0.1" value="36.6"><span class="vv" id="vmTemp">36.6 °C</span></div>
+        <div class="row"><label class="k" for="massKg">Peso / Masa (0G)</label><input type="range" id="massKg" min="62" max="82" step="0.1" value="74.5"><span class="vv" id="vMass">74.5 kg</span></div>
+        <div class="row"><label class="k" for="grav">Gravedad</label><input type="range" id="grav" min="0" max="1" step="0.02" value="0"><span class="vv" id="vGrav">0.00 G</span></div>
+        <div class="row"><label class="k" for="isSleeping">¿Durmiendo ahora?</label><select id="isSleeping"><option value="0">DESPIERTO (Activo)</option><option value="1">DURMIENDO (Sueño)</option></select></div>
+        <div class="row"><label class="k" for="sleep">Sueño acumulado</label><input type="range" id="sleep" min="0" max="12" step="0.5" value="7.5"><span class="vv" id="vSleep">7.5 h</span></div>
+        <div class="row"><label class="k" for="mood">Ánimo</label><input type="range" id="mood" min="0" max="10" step="1" value="8"><span class="vv" id="vMood">8/10</span></div>
+        <div class="row"><label class="k" for="ex">Ejercicio ARED</label><input type="range" id="ex" min="0" max="90" step="5" value="45"><span class="vv" id="vEx">45 min</span></div>
+        <div class="row"><span class="k">Glucosa</span><input type="number" id="glu" min="40" max="300" value="90"> <span class="vv">mg/dL</span></div>
+        <div class="row"><label class="k" for="rad">Radiación</label><input type="range" id="rad" min="0" max="100" value="10"><span class="vv" id="vRad">10 %</span></div>
+        <div class="row"><label class="k" for="co2">CO2 Cabina</label><input type="range" id="co2" min="400" max="6000" step="50" value="950"><span class="vv" id="vCo2">950 ppm</span></div>
+      </div>
+
+      <div class="ctl">
+        <div class="ttl"><span>ESCENARIOS RÁPIDOS DE DEMOSTRACIÓN</span></div>
+        <div class="presets">
+          <button class="btn ghost" type="button" data-preset="nominal">Nominal (0G)</button>
+          <button class="btn ghost" type="button" data-preset="zeroGAtrophy">Pérdida Peso/Hueso en 0G</button>
+          <button class="btn ghost" type="button" data-preset="sleepDepriv">Insomnio y Fatiga</button>
+          <button class="btn ghost" type="button" data-preset="radiation">Tormenta Solar + CO2</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="card">
+        <h2>TENDENCIA EN TIEMPO REAL (ÚLTIMAS 30 LECTURAS)</h2>
+        <label class="note" for="selSig">Indicador:</label> <select id="selSig"></select>
+        <canvas id="chart" width="640" height="170"></canvas>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <h2>RUTINA DIARIA DE LA MISIÓN</h2>
+        <div id="tasks"></div>
+        <div class="bar"><i id="scoreBar" style="width:0%"></i></div>
+        <p><span class="mono" id="scoreTxt"></span> · <span class="mono" id="streakTxt"></span></p>
+        <button class="btn ghost" id="endDay" type="button">Cerrar el día</button>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <h2>LÍNEA BASE PERSONAL DEL ASTRONAUTA</h2>
+        <table>
+          <tr><td>Pulso base</td><td><input type="number" id="bPulse" value="70"> bpm</td></tr>
+          <tr><td>SpO2 base</td><td><input type="number" id="bSpo2" value="98" step="0.1"> %</td></tr>
+          <tr><td>Temperatura base</td><td><input type="number" id="bTemp" value="36.6" step="0.1"> °C</td></tr>
+          <tr><td>Presión base</td><td><input type="number" id="bSys" value="120"> / <input type="number" id="bDia" value="80"> mmHg</td></tr>
+          <tr><td>Peso / Masa base (Tierra)</td><td><input type="number" id="bMass" value="75.0" step="0.5"> kg</td></tr>
+          <tr><td>Glucosa base</td><td><input type="number" id="bGlu" value="90"> mg/dL</td></tr>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">Hecho por estudiantes de la Escuela Industrial N°9 “15 de Noviembre” (El Calafate, Santa Cruz) para el NASA Space Apps Challenge 2026.</div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var SIG = {
+    pulse:  { n:'Pulso', u:'bpm', region:'heart', haz:'gravity' },
+    bp:     { n:'Presión arterial', u:'mmHg', region:'heart', haz:'gravity' },
+    spo2:   { n:'Oxígeno SpO2', u:'%', region:'lungs', haz:'hostile' },
+    co2:    { n:'CO2 Cabina', u:'ppm', region:'lungs', haz:'hostile' },
+    temp:   { n:'Temperatura', u:'°C', region:'immune', haz:'hostile' },
+    glu:    { n:'Glucosa', u:'mg/dL', region:'nutrition', haz:'distance' },
+    massKg: { n:'Peso / Masa (0G)', u:'kg', region:'bones', haz:'gravity' },
+    ex:     { n:'Ejercicio ARED', u:'min', region:'bones', haz:'gravity' },
+    grav:   { n:'Gravedad', u:'G', region:'gravity', haz:'gravity' },
+    sleep:  { n:'Sueño acumulado', u:'h', region:'brain', haz:'isolation' },
+    mood:   { n:'Ánimo', u:'/10', region:'brain', haz:'isolation' },
+    rad:    { n:'Índice Radiación', u:'%', region:'radiation', haz:'radiation' }
+  };
+  var ORDER = ['pulse','bp','spo2','co2','temp','massKg','ex','grav','sleep','mood','glu','rad'];
+  var REGSIG = {
+    brain:['sleep','mood'],
+    heart:['pulse','bp'],
+    lungs:['spo2','co2'],
+    bones:['massKg','ex'],
+    immune:['temp'],
+    nutrition:['glu'],
+    radiation:['rad'],
+    gravity:['grav','massKg','bp']
+  };
+
+  var HAZ = {
+    radiation:{ n:'Radiación espacial', d:'Peligro invisible monitoreado mediante dosímetros y alertas solares NASA DONKI.' },
+    isolation:{ n:'Aislamiento y confinamiento', d:'Alteraciones del sueño, ánimo y ritmo circadiano en hábitats reducidos.' },
+    distance:{ n:'Distancia de la Tierra', d:'Comunicaciones demoradas que exigen autonomía médica y reportes estructurados.' },
+    gravity:{ n:'Campos gravitatorios (0G / Luna / Marte)', d:'Pérdida ósea/muscular, variación de peso inercial (SLAMMD) y desplazamiento de fluidos.' },
+    hostile:{ n:'Ambientes hostiles y cerrados', d:'Control vital de CO2 de cabina, oxigenación SpO2 y respuesta inmunológica.' }
+  };
+
+  var REG = {
+    brain:{ n:'Cerebro, Sueño y Ritmo Circadiano',
+      what:'En microgravedad y aislamiento se altera el reloj circadiano. El interruptor de sueño registra por actigrafía cuándo duerme el tripulante.',
+      act:'Ajustar iluminación LED azul/ámbar según turno de sueño, respetar 7.5 h de descanso y realizar autoevaluación cognitiva.',
+      esc:'Menos de 4 h de sueño o ánimo ≤ 3: activar protocolo de descanso protegido y contactar al cirujano de vuelo.'},
+    heart:{ n:'Corazón y Desplazamiento de Fluidos',
+      what:'En Gravedad 0 (0.00 G), cerca de 2 litros de sangre y líquidos suben desde las piernas hacia el tórax y la cabeza, alterando la presión arterial y el pulso.',
+      act:'Aplicar dispositivo de presión negativa en tren inferior (LBNP), manguitos de muslo y controlar presión en reposo.',
+      esc:'Desviación >20% en pulso o >16% en presión sistólica: ejecutar contramedida cardiovascular e informar a Tierra.'},
+    lungs:{ n:'Pulmones, Oxígeno y CO2 en Ambiente Cerrado',
+      what:'En hábitats cerrados en gravedad cero no hay convección natural: se pueden formar burbujas de CO2 alrededor de la cabeza del astronauta (especialmente mientras duerme).',
+      act:'Si el CO2 supera 2500 ppm o cae la SpO2, encender ventiladores de circulación de cabina y verificar depuradores CDRA/LiOH.',
+      esc:'CO2 ≥ 4000 ppm o caída de SpO2 > 6%: usar máscara de O2 de emergencia.'},
+    bones:{ n:'Huesos, Músculos y Peso Inercial (SLAMMD)',
+      what:'En gravedad 0 el astronauta pierde entre 1% y 1.5% de masa ósea por mes y masa muscular. Su masa real se mide por aceleración con el dispositivo SLAMMD.',
+      act:'Completar al menos 45 min diarios en el equipo resistivo ARED y cinta T2 con arnés de carga.',
+      esc:'Pérdida de masa corporal > 4% (amarillo) o > 8% (rojo) respecto al peso base: ajustar ingesta calórica, vitamina D y carga en ARED.'},
+    immune:{ n:'Sistema Inmune y Temperatura',
+      what:'El estrés espacial y la radiación pueden reactivar virus latentes y alterar la respuesta inmunitaria.',
+      act:'Controlar temperatura corporal, mantener higiene de cabina y descanso.',
+      esc:'Variación térmica > 2% (fiebre o hipotermia): aislar síntomas y enviar reporte médico.'},
+    nutrition:{ n:'Nutrición y Metabolismo (Glucosa)',
+      what:'La ingravidez altera la sensibilidad a la insulina y el requerimiento calórico para sostener la masa corporal.',
+      act:'Medir glucosa en ayunas e hidratar para prevenir cálculos renales por calcio óseo.',
+      esc:'Glucosa con desviación > 30% de la línea base.'},
+    radiation:{ n:'Radiación Espacial (GCR / Tormentas Solares)',
+      what:'Exposición a rayos cósmicos galácticos y eventos de partículas solares (monitoreados vía NASA DONKI).',
+      act:'Reubicar suministros de agua/polietileno y verificar dosímetro activo.',
+      esc:'Índice ≥ 85%: evacuación inmediata al refugio blindado (Storm Shelter).'},
+    gravity:{ n:'Campos Gravitatorios (0G / Luna / Marte)',
+      what:'Las transiciones entre 0G (viaje), 0.16G (Luna), 0.38G (Marte) y 1G afectan el sistema vestibular, los fluidos cefálicos y la tolerancia ortostática.',
+      act:'En 0G activar contramedidas LBNP y ejercicio ARED; antes de aterrizar ejecutar protocolo de carga salina.',
+      esc:'Mareo neurovestibular severo o síncope ortostático.'}
+  };
+
+  var TASKS = ['Control de signos vitales','Presión arterial y Peso SLAMMD','Glucosa en sangre','Check-in de sueño y ánimo','Sesión de ejercicio ARED'];
+  var S = {
+    sel:'gravity', chartSig:'massKg', safeDone:false, streak:0, done:[false,false,false,false,false],
+    base:{ pulse:70, spo2:98, temp:36.6, sys:120, dia:80, glu:90, massKg:75.0 },
+    v:{ pulse:72, spo2:98.0, temp:36.6, sys:120, dia:80, glu:90, massKg:74.5, grav:0.00, isSleeping:false, sleep:7.5, mood:8, ex:45, rad:10, co2:950 },
+    hist:{}
+  };
+  ORDER.forEach(function(k){ S.hist[k] = []; });
+
+  function $(id){ return document.getElementById(id); }
+  function pct(v,b){ return Math.abs(v - b) / b * 100; }
+  function lv(p,l){ return p > l[1] ? 2 : (p > l[0] ? 1 : 0); }
+
+  function levels(v,b){
+    var L = {};
+    L.pulse  = lv(pct(v.pulse, b.pulse), [10, 20]);
+    L.spo2   = lv(Math.max(0, b.spo2 - v.spo2) / b.spo2 * 100, [3, 6]);
+    L.temp   = lv(pct(v.temp, b.temp), [1, 2]);
+    L.bp     = Math.max(lv(pct(v.sys, b.sys), [8, 16]), lv(pct(v.dia, b.dia), [10, 20]));
+    L.glu    = lv(pct(v.glu, b.glu), [15, 30]);
+    var massLoss = Math.max(0, (b.massKg - v.massKg) / b.massKg * 100);
+    L.massKg = lv(massLoss, [4, 8]);
+    L.ex     = v.ex < 10 ? 2 : (v.ex < 30 ? 1 : 0);
+    L.grav   = (v.grav < 0.05 && v.ex < 30) ? 1 : 0;
+    L.sleep  = v.sleep < 4 ? 2 : (v.sleep <= 6 ? 1 : 0);
+    L.mood   = v.mood <= 3 ? 2 : (v.mood <= 5 ? 1 : 0);
+    L.rad    = v.rad >= 85 ? 2 : (v.rad >= 60 ? 1 : 0);
+    L.co2    = v.co2 >= 4000 ? 2 : (v.co2 >= 2500 ? 1 : 0);
+    return L;
+  }
+
+  function overall(L){
+    var worst = 0, y = 0;
+    for(var k in L){ if(L[k] > worst) worst = L[k]; if(L[k] === 1) y++; }
+    if(worst === 1 && y >= 3) return { nivel:2, combo:true };
+    return { nivel:worst, combo:false };
+  }
+
+  function val(k){ return k === 'bp' ? S.v.sys : S.v[k]; }
+  function fmt(k){
+    var v = S.v;
+    if(k === 'bp') return Math.round(v.sys) + '/' + Math.round(v.dia);
+    if(k === 'grav') return v.grav.toFixed(2);
+    if(k === 'spo2' || k === 'temp' || k === 'massKg' || k === 'sleep') return Number(v[k]).toFixed(1);
+    return String(Math.round(v[k]));
+  }
+
+  function render(){
+    var L = levels(S.v, S.base), O = overall(L);
+    var stNames = ['VERDE · NOMINAL','AMARILLO · ATENCIÓN','ROJO · ALERTA CRÍTICA'];
+    var stActs = [
+      'Todos los parámetros dentro del rango personal. Mantener rutina ARED y sueño.',
+      'Desviación moderada detectada: revisar indicadores amarillos y aplicar medidas preventivas.',
+      '¡Riesgo fisiológico o ambiental crítico! Ejecutar contramedida inmediata y enviar informe a Tierra.'
+    ];
+
+    var g = S.v.grav;
+    var gTxt = g < 0.05 ? '0.00 G (MICROGRAVEDAD 0G)' : (g < 0.25 ? g.toFixed(2)+' G (LUNA)' : (g < 0.55 ? g.toFixed(2)+' G (MARTE)' : g.toFixed(2)+' G (TIERRA/1G)'));
+    $('bGrav').textContent = gTxt;
+    $('bSleepState').textContent = S.v.isSleeping ? 'DURMIENDO (ACTIGRAFÍA ON)' : 'DESPIERTO (ACTIVIDAD)';
+    var fluidIdx = g < 0.1 ? Math.min(100, Math.round(68 + (S.v.sys - 115)*0.5)) : Math.round((1 - g)*40);
+    $('bFluid').textContent = fluidIdx + '%';
+    $('bSafe').textContent = S.safeDone ? 'CONTRAMEDIDA EJECUTADA ✓' : (O.nivel > 0 ? 'ACCIÓN REQUERIDA (!)' : 'EN ESPERA');
+
+    var st = $('status'); st.className = 'status l' + O.nivel;
+    $('sBig').textContent = stNames[O.nivel];
+    $('sAct').textContent = stActs[O.nivel];
+    var why = $('sWhy'); why.innerHTML = '';
+    ORDER.forEach(function(k){
+      if(L[k] > 0){
+        var li = document.createElement('li');
+        li.textContent = (L[k] === 2 ? '🔴 ' : '🟡 ') + SIG[k].n + ': ' + fmt(k) + ' ' + SIG[k].u;
+        why.appendChild(li);
+      }
+    });
+    if(!why.children.length){
+      var l0 = document.createElement('li'); l0.textContent = '🟢 Ningún indicador fuera de su línea base.'; why.appendChild(l0);
+    }
+    if(O.combo){
+      var lc = document.createElement('li'); lc.textContent = '⚠ Combinación de 3 o más alertas amarillas eleva el estado a ROJO.'; why.appendChild(lc);
+    }
+
+    var tiles = $('tiles'); tiles.innerHTML = '';
+    ORDER.forEach(function(k){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'tile l' + L[k];
+      var baseInfo = S.base[k] !== undefined ? 'base ' + S.base[k] + ' ' + SIG[k].u : (k === 'bp' ? 'base ' + S.base.sys + '/' + S.base.dia : (k === 'grav' ? (S.v.isSleeping ? 'DURMIENDO' : 'DESPIERTO') : 'monitoreo'));
+      b.innerHTML = '<div class="n">' + SIG[k].n + '</div><div class="v">' + fmt(k) + '<small>' + SIG[k].u + '</small></div><div class="b">' + baseInfo + '</div>';
+      b.addEventListener('click', function(){ S.sel = SIG[k].region; render(); $('infoCard').scrollIntoView({behavior:'smooth',block:'center'}); });
+      tiles.appendChild(b);
+    });
+
+    document.querySelectorAll('.hot, .pillbtn').forEach(function(el){
+      var r = el.dataset.r;
+      var rl = Math.max.apply(null, REGSIG[r].map(function(k){ return L[k]; }));
+      var base = el.classList.contains('hot') ? 'hot' : 'pillbtn';
+      el.setAttribute('class', base + ' lv' + rl + (r === S.sel ? ' sel' : ''));
+    });
+
+    var reg = REG[S.sel];
+    var chips = REGSIG[S.sel].map(function(k){ return '<span class="chip l'+L[k]+'">'+SIG[k].n+': '+fmt(k)+' '+SIG[k].u+'</span>'; }).join('');
+    $('info').innerHTML = '<h3>'+reg.n+'</h3><div class="chips">'+chips+'</div><dl>' +
+      '<dt>FISIOLOGÍA EN EL ESPACIO (NASA HRP)</dt><dd>'+reg.what+'</dd>' +
+      '<dt>MEDIDA DE SEGURIDAD / QUÉ HACER</dt><dd>'+reg.act+'</dd>' +
+      '<dt>CUÁNDO ESCALAR AL CIRUJANO DE VUELO</dt><dd>'+reg.esc+'</dd></dl>';
+
+    var hazBox = $('haz'); hazBox.innerHTML = '';
+    Object.keys(HAZ).forEach(function(h){
+      var ks = ORDER.filter(function(k){ return SIG[k].haz === h; });
+      var hChips = ks.map(function(k){ return '<span class="chip l'+L[k]+'">'+SIG[k].n+'</span>'; }).join('');
+      var d = document.createElement('div'); d.className = 'hz';
+      d.innerHTML = '<b>'+HAZ[h].n+'</b><p>'+HAZ[h].d+'</p><div class="chips">'+hChips+'</div>';
+      hazBox.appendChild(d);
+    });
+
+    renderTasks();
+    drawChart();
+  }
+
+  function renderTasks(){
+    var box = $('tasks'); box.innerHTML = '';
+    var n = 0;
+    TASKS.forEach(function(label, i){
+      var lab = document.createElement('label'); lab.className = 'task';
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!S.done[i];
+      cb.addEventListener('change', function(){ S.done[i] = cb.checked; renderTasks(); });
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(label));
+      box.appendChild(lab); if(S.done[i]) n++;
+    });
+    var score = Math.round(n / TASKS.length * 100);
+    $('scoreBar').style.width = score + '%';
+    $('scoreTxt').textContent = 'Rutina ' + score + '%';
+    $('streakTxt').textContent = 'Racha ' + S.streak + ' días';
+  }
+
+  function pushHist(){
+    ORDER.forEach(function(k){
+      var a = S.hist[k]; a.push(val(k)); if(a.length > 30) a.shift();
+    });
+  }
+
+  function drawChart(){
+    var k = S.chartSig, c = $('chart'), g = c.getContext('2d'), w = c.width, h = c.height;
+    g.clearRect(0,0,w,h);
+    var d = S.hist[k]; if(!d || d.length < 2) return;
+    var b = k === 'bp' ? S.base.sys : S.base[k];
+    var mn = Math.min.apply(null, d), mx = Math.max.apply(null, d);
+    if(b !== undefined){ mn = Math.min(mn, b); mx = Math.max(mx, b); }
+    var pad = (mx - mn)*0.2 || 1; mn -= pad; mx += pad;
+    function Y(v){ return h - 14 - (v - mn)/(mx - mn)*(h - 28); }
+    g.strokeStyle = 'rgba(255,255,255,.08)'; g.fillStyle = '#9aa3c7'; g.font = '11px monospace';
+    for(var i=0;i<4;i++){ var vv = mn + (mx-mn)*i/3, yy = Y(vv); g.beginPath(); g.moveTo(42,yy); g.lineTo(w,yy); g.stroke(); g.fillText(vv.toFixed(1),4,yy+4); }
+    if(b !== undefined){ g.setLineDash([6,5]); g.strokeStyle = '#00ff88'; g.beginPath(); g.moveTo(42,Y(b)); g.lineTo(w,Y(b)); g.stroke(); g.setLineDash([]); }
+    g.strokeStyle = '#00d9ff'; g.lineWidth = 2.4; g.beginPath();
+    d.forEach(function(v,i){ var x = 44 + i/29*(w-54), y = Y(v); if(i===0) g.moveTo(x,y); else g.lineTo(x,y); });
+    g.stroke();
+  }
+
+  function syncSliders(){
+    var v = S.v;
+    $('mPulse').value = v.pulse; $('vmPulse').textContent = v.pulse + ' bpm';
+    $('sys').value = v.sys; $('dia').value = v.dia;
+    $('mSpo2').value = v.spo2; $('vmSpo2').textContent = Number(v.spo2).toFixed(1) + ' %';
+    $('mTemp').value = v.temp; $('vmTemp').textContent = Number(v.temp).toFixed(1) + ' °C';
+    $('massKg').value = v.massKg; $('vMass').textContent = Number(v.massKg).toFixed(1) + ' kg';
+    $('grav').value = v.grav; $('vGrav').textContent = Number(v.grav).toFixed(2) + ' G';
+    $('isSleeping').value = v.isSleeping ? '1' : '0';
+    $('sleep').value = v.sleep; $('vSleep').textContent = v.sleep + ' h';
+    $('mood').value = v.mood; $('vMood').textContent = v.mood + '/10';
+    $('ex').value = v.ex; $('vEx').textContent = v.ex + ' min';
+    $('glu').value = v.glu;
+    $('rad').value = v.rad; $('vRad').textContent = v.rad + ' %';
+    $('co2').value = v.co2; $('vCo2').textContent = v.co2 + ' ppm';
+  }
+
+  function applyWokwiJSON(data){
+    if(data.biometrics){
+      S.v.pulse  = data.biometrics.pulse ?? S.v.pulse;
+      S.v.spo2   = data.biometrics.spo2 ?? S.v.spo2;
+      S.v.temp   = data.biometrics.temp ?? S.v.temp;
+      S.v.sys    = data.biometrics.sys ?? S.v.sys;
+      S.v.dia    = data.biometrics.dia ?? S.v.dia;
+      S.v.glu    = data.biometrics.glu ?? S.v.glu;
+      S.v.massKg = data.biometrics.massKg ?? S.v.massKg;
+      S.v.ex     = data.biometrics.ex ?? S.v.ex;
+      S.v.rad    = data.biometrics.rad ?? S.v.rad;
+    }
+    if(data.environment){
+      S.v.grav = data.environment.gravityG ?? S.v.grav;
+      S.v.co2  = data.environment.co2Ppm ?? S.v.co2;
+    }
+    if(data.circadian){
+      S.v.isSleeping = !!data.circadian.isSleeping;
+      S.v.sleep      = data.circadian.sleep ?? S.v.sleep;
+      S.v.mood       = data.circadian.mood ?? S.v.mood;
+    }
+    if(data.safety){
+      S.safeDone = !!data.safety.countermeasureActive;
+    }
+    syncSliders();
+    pushHist();
+    render();
+  }
+
+  function bindRange(id, key, outId, unit, dec){
+    $(id).addEventListener('input', function(e){
+      S.v[key] = parseFloat(e.target.value);
+      $(outId).textContent = (dec ? S.v[key].toFixed(dec) : S.v[key]) + ' ' + unit;
+      pushHist(); render();
+    });
+  }
+  bindRange('mPulse','pulse','vmPulse','bpm',0);
+  bindRange('mSpo2','spo2','vmSpo2','%',1);
+  bindRange('mTemp','temp','vmTemp','°C',1);
+  bindRange('massKg','massKg','vMass','kg',1);
+  bindRange('grav','grav','vGrav','G',2);
+  bindRange('sleep','sleep','vSleep','h',1);
+  bindRange('mood','mood','vMood','/10',0);
+  bindRange('ex','ex','vEx','min',0);
+  bindRange('rad','rad','vRad','%',0);
+  bindRange('co2','co2','vCo2','ppm',0);
+
+  ['sys','dia','glu'].forEach(function(k){
+    $(k).addEventListener('input', function(e){ S.v[k] = parseFloat(e.target.value)||0; pushHist(); render(); });
+  });
+  $('isSleeping').addEventListener('change', function(e){
+    S.v.isSleeping = e.target.value === '1'; render();
+  });
+
+  [['bPulse','pulse'],['bSpo2','spo2'],['bTemp','temp'],['bSys','sys'],['bDia','dia'],['bMass','massKg'],['bGlu','glu']].forEach(function(p){
+    $(p[0]).addEventListener('input', function(e){ var x = parseFloat(e.target.value); if(x>0){ S.base[p[1]] = x; render(); } });
+  });
+
+  $('safeBtn').addEventListener('click', function(){ S.safeDone = !S.safeDone; render(); });
+  $('endDay').addEventListener('click', function(){
+    if(S.done.every(Boolean)) S.streak++;
+    S.done = [false,false,false,false,false];
+    renderTasks();
+  });
+
+  $('btnParseJson').addEventListener('click', function(){
+    try {
+      var obj = JSON.parse($('wokwiJsonInput').value.trim());
+      applyWokwiJSON(obj);
+    } catch(err) {
+      alert('El JSON pegado no es válido. Copia una línea completa del Monitor Serie de Wokwi.');
+    }
+  });
+
+  var mqttClient = null;
+  $('btnMqtt').addEventListener('click', function(){
+    if(mqttClient){ mqttClient.end(); mqttClient = null; $('mqttBadge').innerHTML = 'Wokwi MQTT: <b>OFFLINE</b>'; $('btnMqtt').textContent = 'Conectar Broker Wokwi'; return; }
+    $('mqttBadge').innerHTML = 'Wokwi MQTT: <b>CONECTANDO...</b>';
+    mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+    mqttClient.on('connect', function(){
+      $('mqttBadge').innerHTML = 'Wokwi MQTT: <b style="color:#00ff88">EN VIVO (barrilete/astro01/telemetry)</b>';
+      $('btnMqtt').textContent = 'Desconectar Wokwi';
+      mqttClient.subscribe('barrilete/astro01/telemetry');
+    });
+    mqttClient.on('message', function(topic, message){
+      try {
+        var data = JSON.parse(message.toString());
+        $('wokwiJsonInput').value = message.toString();
+        applyWokwiJSON(data);
+      } catch(e){}
+    });
+  });
+
+  var PRESETS = {
+    nominal:      { pulse:72, spo2:98.0, temp:36.6, sys:120, dia:80, glu:90, massKg:74.6, grav:0.00, isSleeping:false, sleep:7.5, mood:8, ex:50, rad:12, co2:900 },
+    zeroGAtrophy: { pulse:82, spo2:97.5, temp:36.7, sys:135, dia:88, glu:98, massKg:68.2, grav:0.00, isSleeping:false, sleep:6.5, mood:6, ex:5,  rad:18, co2:1200 },
+    sleepDepriv:  { pulse:88, spo2:96.5, temp:36.9, sys:132, dia:86, glu:105,massKg:73.5, grav:0.16, isSleeping:true,  sleep:3.5, mood:3, ex:20, rad:25, co2:2900 },
+    radiation:    { pulse:112,spo2:93.0, temp:37.5, sys:148, dia:96, glu:125,massKg:72.0, grav:0.00, isSleeping:false, sleep:4.5, mood:4, ex:15, rad:92, co2:4500 }
+  };
+  document.querySelectorAll('[data-preset]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var p = PRESETS[b.dataset.preset];
+      for(var k in p) S.v[k] = p[k];
+      S.safeDone = false;
+      syncSliders(); pushHist(); render();
+    });
+  });
+
+  document.querySelectorAll('.hot, .pillbtn').forEach(function(el){
+    el.addEventListener('click', function(){ S.sel = el.dataset.r; render(); });
+  });
+
+  $('repBtn').addEventListener('click', function(){
+    var L = levels(S.v, S.base), O = overall(L), v = S.v;
+    var lines = [
+      'INFORME DE SALUD · ASTRO-01 · BARRILETE CÓSMICO (WOKWI TELEMETRY)',
+      'Fecha: ' + new Date().toLocaleString(),
+      'Estado General: ' + ['VERDE','AMARILLO','ROJO'][O.nivel] + (S.safeDone ? ' (Contramedida Ejecutada)' : ''),
+      'Ambiente: Gravedad ' + v.grav.toFixed(2) + ' G | Estado: ' + (v.isSleeping ? 'DURMIENDO' : 'DESPIERTO') + ' | CO2: ' + v.co2 + ' ppm',
+      'Fisiología 0G: Peso SLAMMD ' + v.massKg.toFixed(1) + ' kg (Base ' + S.base.massKg + ' kg) | Ejercicio: ' + v.ex + ' min',
+      'Signos Vitales: Pulso ' + v.pulse + ' bpm | PA ' + v.sys + '/' + v.dia + ' mmHg | SpO2 ' + v.spo2.toFixed(1) + '% | Temp ' + v.temp.toFixed(1) + ' °C',
+      'Metabolismo y Radiación: Glucosa ' + v.glu + ' mg/dL | Sueño ' + v.sleep + ' h | Ánimo ' + v.mood + '/10 | Radiación ' + v.rad + '%'
+    ];
+    $('repTxt').value = lines.join('\n');
+    $('repBox').hidden = false;
+  });
+
+  $('copyBtn').addEventListener('click', function(){
+    if(navigator.clipboard) navigator.clipboard.writeText($('repTxt').value);
+  });
+
+  var sel = $('selSig');
+  ORDER.forEach(function(k){
+    var o = document.createElement('option'); o.value = k; o.textContent = SIG[k].n + ' (' + SIG[k].u + ')';
+    if(k === S.chartSig) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', function(e){ S.chartSig = e.target.value; drawChart(); });
+
+  for(var i=0;i<30;i++) pushHist();
+  syncSliders();
+  render();
+})();
+</script>
+</body>
+</html>
